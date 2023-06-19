@@ -1,20 +1,6 @@
-import eng_to_ipa as phoneme
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-
-
-def get_char_enc():
-    chars = sorted([*'0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~ \t\n\r\x0b\x0c'])
-    vocab_size = len(chars)
-    stoi = {ch: i for i, ch in enumerate(chars)}
-    itos = {i: ch for i, ch in enumerate(chars)}
-    encode = lambda s: [stoi[c] for c in s]
-    decode = lambda l: ''.join([itos[i] for i in l])
-    return encode, decode, vocab_size
-
-
-enc, dec, _ = get_char_enc()
 
 n_enc = 8
 n_dec = 6
@@ -22,9 +8,8 @@ n_dec = 6
 enc_embed = 512
 mel_embed = 128
 
-n_embed = 512
-dec_hidden = 512
-enc_hidden = 512
+n_embed = 256
+dec_hidden = 256
 
 enc_kernel = 6
 
@@ -177,6 +162,7 @@ class MelLinear(nn.Module):
         super().__init__()
         self.Linear = nn.Sequential(
             nn.Linear(dec_hidden, dec_hidden),
+            nn.ReLU(),
             nn.Linear(dec_hidden, mel_embed)
         )
 
@@ -219,48 +205,34 @@ class ViT(nn.Module):
         # put our text through the pre net
         dec_idx = dec_idx[:, :, -ctx_size:]
         enc_idx = enc_idx[:, -ctx_size:]
+
         enc_out = self.encoder_prenet(enc_idx)  # (B, T, C)
-        _, C, T = enc_out.shape
+        _, T, _ = enc_out.shape
 
-        # enc_pos_emb = self.position_embedding_table(torch.arange(T, device=device))
+        enc_pos_emb = self.position_embedding_table(torch.arange(T, device=device))
 
-        # enc_out = enc_out + enc_pos_emb
+        enc_out = enc_out + enc_pos_emb
         enc_out = self.encoder(enc_out)
-
-        dec_idx = dec_idx[:, -ctx_size:]
-
-        _, _, T = dec_idx.shape
 
         # put spectrogram through pre net
         dec_out = self.decoder_prenet(dec_idx)  # (B, T, C)
 
-        # dec_idx = dec_idx.transpose(1, 2)
-        # dec_pos_emb = self.position_embedding_table(torch.arange(T, device=device))
-        # dec_out = dec_out + dec_pos_emb
 
         dec_out, _ = self.decoder((dec_out, enc_out))
-        last_step = dec_out[:, -1, :]
-        mel_spectrogram = self.mel_linear(last_step)
 
-        # mel_spectrograms = torch.stack([dec_idx, mel_spectrogram], dim=2)
+        mel_spectrogram = self.mel_linear(dec_out)
 
-        # # idx and targets are both (batch, time) tensors of int
-        # tok_emb = self.token_embedding_table(idx)  # (batch, time, channel)
-        # pos_emb = self.position_embedding_table(torch.arange(T, device=device))  # (T, C)
-        # x = tok_emb + pos_emb  # (B, T, C)
-        # x = self.blocks(x)
-        # x = self.l_norm(x)
-        # logits = self.lm_head(x)  # (B, T, vocab_size)
 
         if targets is None:
-            loss_mel = None
+            loss = None
         else:
             # need to reshape tensors because pytorch expects (B*T, C) in cross_entropy
             # B, C = mel_spectrogram.shape
-            print(targets.shape)
-            loss_mel = F.mse_loss(mel_spectrogram, targets)
+            targets = targets[:, :, -ctx_size:]
+            mel_spectrogram = mel_spectrogram.transpose(1,2)
+            loss = F.mse_loss(mel_spectrogram, targets)
 
-        return mel_spectrogram, loss_mel
+        return mel_spectrogram, loss
 
     def generate(self, idx, stop_token):
         stop_linear = torch.ones(128)
