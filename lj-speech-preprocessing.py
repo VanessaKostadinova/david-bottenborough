@@ -9,7 +9,6 @@ def map_to_array(batch):
     y, sr = librosa.load(batch['audio']['path'])
     audio, _ = librosa.effects.trim(y)
     mel = librosa.feature.melspectrogram(y=audio, sr=sr)
-    print(len(mel[1]))
     batch["mel"] = mel
     return batch
 

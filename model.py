@@ -147,11 +147,9 @@ class EncoderPreNet(nn.Module):
         self.proj = nn.Linear(n_embed, n_embed)
 
     def forward(self, x):
-        # x = self.phoneme_converter(x)
         x = self.embed(x)  # (B, T, C)
         x = x.transpose(1, 2)  # (B, C, T)
         x = self.CNN(x)  # (B, C, L)
-        # x = x.view(x.size(0), -1)
         x = x.transpose(1, 2)  # (B, L, C)
         x = self.proj(x)  # (B, L, C)
         return x
@@ -217,11 +215,9 @@ class ViT(nn.Module):
         # put spectrogram through pre net
         dec_out = self.decoder_prenet(dec_idx)  # (B, T, C)
 
-
         dec_out, _ = self.decoder((dec_out, enc_out))
 
         mel_spectrogram = self.mel_linear(dec_out)
-
 
         if targets is None:
             loss = None
@@ -229,22 +225,20 @@ class ViT(nn.Module):
             # need to reshape tensors because pytorch expects (B*T, C) in cross_entropy
             # B, C = mel_spectrogram.shape
             targets = targets[:, :, -ctx_size:]
-            mel_spectrogram = mel_spectrogram.transpose(1,2)
+            mel_spectrogram = mel_spectrogram.transpose(1, 2)
             loss = F.mse_loss(mel_spectrogram, targets)
 
         return mel_spectrogram, loss
 
     def generate(self, idx, stop_token):
-        stop_linear = torch.ones(128)
+        calc_stop_token = torch.ones(128)
 
-        while torch.eq(stop_linear, stop_token):
+        while torch.eq(calc_stop_token, stop_token):
             idx_ctx = idx[:, -ctx_size:]
             # prediction
-            spec, stop, _, _ = self(idx_ctx)
+            mel, _ = self(idx_ctx)
             # get last timestep logits
-            spec = spec[:, -1, :]  # (B, C)
-            # softmax
-            probs = F.softmax(spec, dim=1)  # (B, C)
-            idx_next = torch.multinomial(probs, num_samples=1)  # (B, 1)
-            idx = torch.cat((idx, idx_next), dim=1)  # (B, T+1)
+            mel = mel[:, -1, :]  # (B, 1, C)
+            idx = torch.cat((idx, mel), dim=1)  # (B, T+1, C)
+
         return idx

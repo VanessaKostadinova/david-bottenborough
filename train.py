@@ -6,8 +6,8 @@ import model
 import torch.nn.functional as F
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-dataset_path = 'F:/Code/personal/datasets/text-to-speech/lj_speech_mel.ds'
-dataset_text_path = 'F:/Code/personal/datasets/text-to-speech/lj_speech_text.txt'
+dataset_path = '/Users/vanessa/WorkProjects/datasets/lj_speech/lj-mel-full'
+dataset_text_path = '/Users/vanessa/WorkProjects/datasets/lj_speech/lj_speech_text.txt'
 dataset = datasets.load_from_disk(dataset_path)
 random = Random(12345)
 batch_size = 64
@@ -24,10 +24,15 @@ def get_char_enc(chars):
     return encode, decode, vocab_size
 
 
+with open(dataset_text_path, 'x') as text_file:
+    for d in dataset:
+        text_file.write(d['text'])
+        text_file.write('\n')
+
 with open(dataset_text_path, 'r') as text_file:
     enc, dec, vocab_size = get_char_enc(text_file.read())
 
-# batch = all time
+
 def get_batch():
     indexes = [random.randint(0, len(dataset) - 1) for _ in range(batch_size)]
     data = [dataset[i] for i in indexes]
@@ -51,7 +56,7 @@ def get_batch():
 # --------------
 
 model = model.ViT().to(device)
-optimiser = torch.optim.AdamW(model.parameters(), lr=1.5e-15Haha)
+optimiser = torch.optim.AdamW(model.parameters(), lr=1.5e-15)
 
 for e in range(epochs):
     x, y, yt = get_batch() # x = (B, T) y = (B, C, T)  x will become BTC when it is embedded
